@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia';
-import { ref, computed } from 'vue';
+import { ref, computed, onMounted, onUnmounted } from 'vue';
 import type { HourlySnapshot } from '../types/trend';
 import { useQueueStore } from './queue';
 import { useTableStore } from './table';
@@ -26,48 +26,92 @@ const mockSnapshots: HourlySnapshot[] = [
 const historicalSnapshots = mockSnapshots.filter(s => s.hour < currentHour);
 
 export const useTrendStore = defineStore('trend', () => {
-  const snapshots = ref<HourlySnapshot[]>([...historicalSnapshots]);
+  const historical = ref<HourlySnapshot[]>([...historicalSnapshots]);
+  const tick = ref(0);
+  let timer: number | null = null;
 
   const queueStore = useQueueStore();
   const tableStore = useTableStore();
   const statsStore = useStatsStore();
 
-  const lastSnapshotHour = computed(() => {
-    if (snapshots.value.length === 0) return -1;
-    return snapshots.value[snapshots.value.length - 1].hour;
+  const currentHourLive = computed(() => {
+    tick.value;
+    return new Date().getHours();
   });
 
-  const takeSnapshot = () => {
-    const hour = new Date().getHours();
-    const queueCount = queueStore.waitingItems.length;
-    const turnoverRate = statsStore.turnoverRate;
-    const diningCount = tableStore.diningTables.length;
+  const currentSnapshotLive = computed<HourlySnapshot>(() => ({
+    hour: currentHourLive.value,
+    queueCount: queueStore.waitingItems.length,
+    turnoverRate: statsStore.turnoverRate,
+    diningCount: tableStore.diningTables.length,
+  }));
 
-    if (hour === lastSnapshotHour.value) {
-      snapshots.value[snapshots.value.length - 1] = { hour, queueCount, turnoverRate, diningCount };
-    } else {
-      snapshots.value.push({ hour, queueCount, turnoverRate, diningCount });
+  const fullSnapshots = computed<HourlySnapshot[]>(() => {
+    const hist = [...historical.value];
+    const curr = currentSnapshotLive.value;
+
+    if (hist.length === 0 || hist[hist.length - 1].hour < curr.hour) {
+      hist.push({ ...curr });
+    } else if (hist[hist.length - 1].hour === curr.hour) {
+      hist[hist.length - 1] = { ...curr };
+    }
+
+    return hist;
+  });
+
+  const startTicker = () => {
+    if (timer) return;
+    timer = window.setInterval(() => {
+      tick.value++;
+    }, 10000);
+  };
+
+  const stopTicker = () => {
+    if (timer) {
+      clearInterval(timer);
+      timer = null;
+    }
+  };
+
+  const takeSnapshot = () => {
+    const curr = currentSnapshotLive.value;
+    const hist = historical.value;
+
+    if (hist.length === 0 || hist[hist.length - 1].hour < curr.hour) {
+      hist.push({ ...curr });
+    } else if (hist[hist.length - 1].hour === curr.hour) {
+      hist[hist.length - 1] = { ...curr };
     }
   };
 
   const queueTrend = computed(() =>
-    snapshots.value.map(s => s.queueCount)
+    fullSnapshots.value.map(s => s.queueCount)
   );
 
   const turnoverTrend = computed(() =>
-    snapshots.value.map(s => s.turnoverRate)
+    fullSnapshots.value.map(s => s.turnoverRate)
   );
 
   const labels = computed(() =>
-    snapshots.value.map(s => `${s.hour.toString().padStart(2, '0')}:00`)
+    fullSnapshots.value.map(s => `${s.hour.toString().padStart(2, '0')}:00`)
   );
 
   const currentQueueCount = computed(() => queueStore.waitingItems.length);
   const currentTurnoverRate = computed(() => statsStore.turnoverRate);
 
+  onMounted(() => {
+    startTicker();
+  });
+
+  onUnmounted(() => {
+    stopTicker();
+  });
+
   return {
-    snapshots,
+    snapshots: fullSnapshots,
     takeSnapshot,
+    startTicker,
+    stopTicker,
     queueTrend,
     turnoverTrend,
     labels,

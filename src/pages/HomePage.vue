@@ -14,18 +14,15 @@ import FloorPlan from '../components/floor/FloorPlan.vue';
 const queueStore = useQueueStore();
 const tableStore = useTableStore();
 const reservationStore = useReservationStore();
-const trendStore = useTrendStore();
+useTrendStore();
 
 let tickTimer: number | null = null;
 let reservationTimer: number | null = null;
 
 onMounted(() => {
-  trendStore.takeSnapshot();
-
   tickTimer = window.setInterval(() => {
     tableStore.updateDiningDurations();
     queueStore.updateWaitTimes();
-    trendStore.takeSnapshot();
   }, 60000);
 
   reservationTimer = window.setInterval(() => {
