@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue';
-import { Clock, Users, Phone, MapPin, AlertTriangle, Check, X, MessageSquare, Sparkles, UtensilsCrossed, ChevronRight } from 'lucide-vue-next';
+import { Clock, Users, Phone, MapPin, AlertTriangle, Check, X, MessageSquare, Sparkles, UtensilsCrossed, ChevronRight, CalendarCheck } from 'lucide-vue-next';
 import type { Reservation } from '../../types/reservation';
 import type { TableInfo } from '../../types/table';
 import { formatTime, getMinutesDiff } from '../../composables/useTimer';
@@ -32,7 +32,20 @@ const recommendedTables = computed(() =>
 
 const hasRecommendedTables = computed(() => recommendedTables.value.length > 0);
 
-const getTableMatchLevel = (table: TableInfo): 'perfect' | 'good' | 'alternative' => {
+const isSeated = computed(() => reservationStore.isReservationSeated(props.reservation.id));
+
+const isArrivedNotSeated = computed(() => 
+  props.reservation.status === 'arrived' && !isSeated.value
+);
+
+const isReservedTable = (table: TableInfo): boolean => {
+  return table.id === props.reservation.tableId && table.status === 'reserved';
+};
+
+const getTableMatchLevel = (table: TableInfo): 'reserved' | 'perfect' | 'good' | 'alternative' => {
+  if (isReservedTable(table)) {
+    return 'reserved';
+  }
   if (table.tableType === props.reservation.tableType && table.capacity === props.reservation.partySize) {
     return 'perfect';
   }
@@ -43,6 +56,7 @@ const getTableMatchLevel = (table: TableInfo): 'perfect' | 'good' | 'alternative
 };
 
 const matchLevelLabels: Record<string, { label: string; class: string; bgClass: string }> = {
+  reserved: { label: '预留桌位', class: 'text-violet-700', bgClass: 'bg-violet-100' },
   perfect: { label: '完美匹配', class: 'text-emerald-700', bgClass: 'bg-emerald-100' },
   good: { label: '推荐', class: 'text-blue-700', bgClass: 'bg-blue-100' },
   alternative: { label: '备选', class: 'text-amber-700', bgClass: 'bg-amber-100' },
@@ -88,8 +102,15 @@ const statusConfig = computed(() => {
         icon: Clock,
       };
     case 'arrived':
+      if (!isSeated.value) {
+        return {
+          label: '待入座',
+          class: 'bg-amber-100 text-amber-700 border-amber-200',
+          icon: AlertTriangle,
+        };
+      }
       return {
-        label: '已到店',
+        label: '已入座',
         class: 'bg-emerald-100 text-emerald-700 border-emerald-200',
         icon: Check,
       };
@@ -113,7 +134,8 @@ const statusConfig = computed(() => {
         'bg-blue-500': reservation.status === 'pending' && !isExpiring,
         'bg-orange-500': isExpiring,
         'bg-rose-500': isOverdue || reservation.status === 'expired',
-        'bg-emerald-500': reservation.status === 'arrived',
+        'bg-amber-500': isArrivedNotSeated,
+        'bg-emerald-500': reservation.status === 'arrived' && isSeated,
         'bg-slate-400': reservation.status === 'cancelled',
       }"
     />
@@ -129,6 +151,8 @@ const statusConfig = computed(() => {
           ? 'bg-rose-50/50 border-rose-200'
           : isExpiring
           ? 'bg-orange-50/50 border-orange-200'
+          : isArrivedNotSeated
+          ? 'bg-amber-50/50 border-amber-200'
           : reservation.status === 'cancelled'
           ? 'bg-slate-50 border-slate-200 opacity-70'
           : 'bg-white border-slate-200',
@@ -230,11 +254,24 @@ const statusConfig = computed(() => {
               <div
                 v-for="table in recommendedTables"
                 :key="table.id"
-                class="flex items-center gap-3 p-3 rounded-xl border border-slate-200 hover:border-emerald-300 hover:bg-emerald-50/50 cursor-pointer transition-all group"
+                class="flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition-all group"
+                :class="[
+                  isReservedTable(table)
+                    ? 'border-violet-300 bg-violet-50/60 hover:bg-violet-50 hover:border-violet-400'
+                    : 'border-slate-200 hover:border-emerald-300 hover:bg-emerald-50/50'
+                ]"
                 @click="handleSelectTable(table.id)"
               >
-                <div class="w-12 h-12 rounded-xl bg-emerald-100 flex items-center justify-center shrink-0">
-                  <span class="font-bold text-emerald-700">{{ table.name }}</span>
+                <div
+                  class="w-12 h-12 rounded-xl flex items-center justify-center shrink-0"
+                  :class="isReservedTable(table) ? 'bg-violet-100' : 'bg-emerald-100'"
+                >
+                  <span
+                    class="font-bold"
+                    :class="isReservedTable(table) ? 'text-violet-700' : 'text-emerald-700'"
+                  >
+                    {{ table.name }}
+                  </span>
                 </div>
                 <div class="flex-1 min-w-0">
                   <div class="flex items-center gap-2 mb-0.5">
@@ -243,7 +280,8 @@ const statusConfig = computed(() => {
                       class="text-[10px] px-1.5 py-0.5 rounded-md font-medium"
                       :class="[matchLevelLabels[getTableMatchLevel(table)].bgClass, matchLevelLabels[getTableMatchLevel(table)].class]"
                     >
-                      <Sparkles v-if="getTableMatchLevel(table) === 'perfect'" class="w-3 h-3 inline -mt-0.5" />
+                      <CalendarCheck v-if="getTableMatchLevel(table) === 'reserved'" class="w-3 h-3 inline -mt-0.5" />
+                      <Sparkles v-else-if="getTableMatchLevel(table) === 'perfect'" class="w-3 h-3 inline -mt-0.5" />
                       {{ matchLevelLabels[getTableMatchLevel(table)].label }}
                     </span>
                   </div>
@@ -253,7 +291,10 @@ const statusConfig = computed(() => {
                     <span>可坐{{ table.capacity }}人</span>
                   </div>
                 </div>
-                <ChevronRight class="w-5 h-5 text-slate-300 group-hover:text-emerald-500 transition-colors shrink-0" />
+                <ChevronRight
+                  class="w-5 h-5 transition-colors shrink-0"
+                  :class="isReservedTable(table) ? 'text-violet-300 group-hover:text-violet-500' : 'text-slate-300 group-hover:text-emerald-500'"
+                />
               </div>
             </div>
           </div>

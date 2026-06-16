@@ -18,6 +18,21 @@ export const useReservationStore = defineStore('reservation', () => {
     todayReservations.value.filter((r) => r.status === 'pending')
   );
 
+  const isReservationSeated = (reservationId: string): boolean => {
+    const reservation = reservations.value.find((r) => r.id === reservationId);
+    if (!reservation || reservation.status !== 'arrived') return false;
+    if (!reservation.tableId) return false;
+    const table = tableStore.getTableById(reservation.tableId);
+    if (!table || table.status !== 'dining') return false;
+    return table.currentParty?.reservationId === reservationId;
+  };
+
+  const arrivedNotSeatedReservations = computed(() =>
+    todayReservations.value.filter(
+      (r) => r.status === 'arrived' && !isReservationSeated(r.id)
+    )
+  );
+
   const checkExpired = () => {
     const now = new Date();
     reservations.value.forEach((r) => {
@@ -43,9 +58,17 @@ export const useReservationStore = defineStore('reservation', () => {
     const reservation = reservations.value.find((r) => r.id === reservationId);
     if (!reservation) return [];
 
-    const { tableType, partySize } = reservation;
+    const { tableType, partySize, tableId: reservedTableId } = reservation;
 
-    const idleTables = tableStore.tables.filter((t) => t.status === 'idle');
+    const reservedTable = reservedTableId
+      ? tableStore.tables.find((t) => t.id === reservedTableId && t.status === 'reserved')
+      : undefined;
+
+    const availableTables = tableStore.tables.filter((t) => 
+      t.status === 'idle' || (t.status === 'reserved' && t.id === reservedTableId)
+    );
+
+    const idleTables = availableTables.filter((t) => t.status === 'idle');
 
     const sameTypePerfect = idleTables.filter(
       (t) => t.tableType === tableType && t.capacity === partySize
@@ -65,7 +88,11 @@ export const useReservationStore = defineStore('reservation', () => {
         return a.capacity - b.capacity;
       });
 
-    return [...sameTypePerfect, ...sameTypeLarger, ...otherTypes];
+    const result: TableInfo[] = [];
+    if (reservedTable) {
+      result.push(reservedTable);
+    }
+    return [...result, ...sameTypePerfect, ...sameTypeLarger, ...otherTypes];
   };
 
   const seatReservation = (reservationId: string, tableId: string) => {
@@ -73,7 +100,12 @@ export const useReservationStore = defineStore('reservation', () => {
     if (!reservation) return false;
 
     const table = tableStore.getTableById(tableId);
-    if (!table || table.status !== 'idle') return false;
+    if (!table) return false;
+
+    const isOwnReservedTable = reservation.tableId === tableId && table.status === 'reserved';
+    const isIdleTable = table.status === 'idle';
+
+    if (!isOwnReservedTable && !isIdleTable) return false;
 
     if (reservation.tableId && reservation.tableId !== tableId) {
       const oldTable = tableStore.getTableById(reservation.tableId);
@@ -123,6 +155,8 @@ export const useReservationStore = defineStore('reservation', () => {
     reservations,
     todayReservations,
     pendingReservations,
+    arrivedNotSeatedReservations,
+    isReservationSeated,
     checkExpired,
     markArrived,
     getRecommendedTables,
