@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted } from 'vue';
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue';
 import { useRouter } from 'vue-router';
-import { Clock, Users, UtensilsCrossed, UsersRound, DoorOpen, Volume2, ChevronRight, ArrowLeft } from 'lucide-vue-next';
+import { Clock, Users, UtensilsCrossed, UsersRound, DoorOpen, Volume2, ChevronRight, ArrowLeft, Wifi, WifiOff } from 'lucide-vue-next';
 import { useQueueStore } from '../stores/queue';
 import { useTableStore } from '../stores/table';
 import type { TableType, QueueItem } from '../types/queue';
@@ -12,6 +12,22 @@ const router = useRouter();
 
 const currentTime = ref(new Date());
 let timeTimer: number | null = null;
+
+const lastSyncTime = ref<Date | null>(null);
+const syncStatus = ref<'connected' | 'syncing' | 'disconnected'>('connected');
+let syncCheckTimer: number | null = null;
+
+watch(
+  () => [queueStore.items.length, queueStore.currentCalled?.id],
+  () => {
+    lastSyncTime.value = new Date();
+    syncStatus.value = 'syncing';
+    setTimeout(() => {
+      syncStatus.value = 'connected';
+    }, 500);
+  },
+  { deep: true }
+);
 
 const iconMap: Record<string, any> = {
   UtensilsCrossed,
@@ -77,11 +93,25 @@ onMounted(() => {
   timeTimer = window.setInterval(() => {
     currentTime.value = new Date();
   }, 1000);
+
+  syncCheckTimer = window.setInterval(() => {
+    if (lastSyncTime.value) {
+      const diff = (Date.now() - lastSyncTime.value.getTime()) / 1000;
+      if (diff > 30 && syncStatus.value === 'connected') {
+        syncStatus.value = 'disconnected';
+      }
+    }
+  }, 5000);
+
+  lastSyncTime.value = new Date();
 });
 
 onUnmounted(() => {
   if (timeTimer) {
     clearInterval(timeTimer);
+  }
+  if (syncCheckTimer) {
+    clearInterval(syncCheckTimer);
   }
 });
 </script>
@@ -113,6 +143,25 @@ onUnmounted(() => {
         </div>
 
         <div class="flex items-center gap-10">
+          <div class="flex items-center gap-2">
+            <div class="flex items-center gap-1.5">
+              <Wifi v-if="syncStatus === 'connected'" class="w-5 h-5 text-emerald-400" />
+              <Wifi v-else-if="syncStatus === 'syncing'" class="w-5 h-5 text-amber-400 animate-pulse" />
+              <WifiOff v-else class="w-5 h-5 text-rose-400" />
+            </div>
+            <div class="text-right">
+              <div class="text-sm font-medium" :class="{
+                'text-emerald-400': syncStatus === 'connected',
+                'text-amber-400': syncStatus === 'syncing',
+                'text-rose-400': syncStatus === 'disconnected',
+              }">
+                {{ syncStatus === 'connected' ? '已同步' : syncStatus === 'syncing' ? '同步中...' : '未连接' }}
+              </div>
+              <div class="text-xs text-slate-500">
+                {{ lastSyncTime ? `${lastSyncTime.getHours().toString().padStart(2,'0')}:${lastSyncTime.getMinutes().toString().padStart(2,'0')}:${lastSyncTime.getSeconds().toString().padStart(2,'0')}` : '--' }}
+              </div>
+            </div>
+          </div>
           <div class="flex items-center gap-3">
             <Users class="w-6 h-6 text-amber-400" />
             <div class="text-right">

@@ -1,14 +1,62 @@
 import { defineStore } from 'pinia';
-import { ref, computed } from 'vue';
+import { ref, computed, watch } from 'vue';
 import type { TableInfo, TableType, TableStatus } from '../types/table';
 import { initialTables, tableStatusConfigs } from '../mock/tables';
 import { getMinutesDiff } from '../composables/useTimer';
 import { useStatsStore } from './stats';
+import { useCrossTabSync } from '../composables/useCrossTabSync';
+
+interface TableSyncState {
+  tables: TableInfo[];
+}
+
+const serializeTableState = (state: TableSyncState) => ({
+  tables: state.tables.map((table) => ({
+    ...table,
+    diningStartTime: table.diningStartTime ? table.diningStartTime.toISOString() : null,
+  })),
+});
+
+const deserializeTableState = (data: any): TableSyncState => ({
+  tables: data.tables.map((table: any) => ({
+    ...table,
+    diningStartTime: table.diningStartTime ? new Date(table.diningStartTime) : undefined,
+  })),
+});
 
 export const useTableStore = defineStore('table', () => {
   const tables = ref<TableInfo[]>(JSON.parse(JSON.stringify(initialTables)));
   const statusConfigs = tableStatusConfigs;
   const statsStore = useStatsStore();
+
+  const syncState = computed<TableSyncState>(() => ({
+    tables: tables.value,
+  }));
+
+  const syncStateRef = ref<TableSyncState>(syncState.value);
+
+  watch(
+    syncState,
+    (newVal) => {
+      syncStateRef.value = newVal;
+    },
+    { deep: true }
+  );
+
+  const { loadInitialState, requestState, cleanup } = useCrossTabSync<TableSyncState>(
+    'table',
+    syncStateRef,
+    serializeTableState,
+    deserializeTableState,
+    (newState) => {
+      tables.value = newState.tables;
+    }
+  );
+
+  const initialized = loadInitialState();
+  if (!initialized) {
+    requestState();
+  }
 
   const totalTables = computed(() => tables.value.length);
 
@@ -107,5 +155,6 @@ export const useTableStore = defineStore('table', () => {
     updateDiningDurations,
     getTablesByRows,
     getStatusConfig,
+    _syncCleanup: cleanup,
   };
 });

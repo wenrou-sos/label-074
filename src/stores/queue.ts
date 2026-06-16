@@ -1,10 +1,49 @@
 import { defineStore } from 'pinia';
-import { ref, computed } from 'vue';
+import { ref, computed, watch } from 'vue';
 import type { QueueItem, TableType, QueueStatus } from '../types/queue';
 import { queueColumnConfigs, initialQueueItems, customerNames, genRandomPhone } from '../mock/queue';
 import { getMinutesDiff } from '../composables/useTimer';
 import { useTableStore } from './table';
 import { useStatsStore } from './stats';
+import { useCrossTabSync } from '../composables/useCrossTabSync';
+
+interface QueueSyncState {
+  items: QueueItem[];
+  currentCalled: QueueItem | null;
+  counters: Record<string, number>;
+}
+
+const serializeQueueState = (state: QueueSyncState) => ({
+  items: state.items.map((item) => ({
+    ...item,
+    createdAt: item.createdAt.toISOString(),
+    calledAt: item.calledAt ? item.calledAt.toISOString() : null,
+  })),
+  currentCalled: state.currentCalled
+    ? {
+        ...state.currentCalled,
+        createdAt: state.currentCalled.createdAt.toISOString(),
+        calledAt: state.currentCalled.calledAt ? state.currentCalled.calledAt.toISOString() : null,
+      }
+    : null,
+  counters: state.counters,
+});
+
+const deserializeQueueState = (data: any): QueueSyncState => ({
+  items: data.items.map((item: any) => ({
+    ...item,
+    createdAt: new Date(item.createdAt),
+    calledAt: item.calledAt ? new Date(item.calledAt) : undefined,
+  })),
+  currentCalled: data.currentCalled
+    ? {
+        ...data.currentCalled,
+        createdAt: new Date(data.currentCalled.createdAt),
+        calledAt: data.currentCalled.calledAt ? new Date(data.currentCalled.calledAt) : undefined,
+      }
+    : null,
+  counters: data.counters,
+});
 
 export const useQueueStore = defineStore('queue', () => {
   const items = ref<QueueItem[]>([...initialQueueItems]);
@@ -20,6 +59,39 @@ export const useQueueStore = defineStore('queue', () => {
 
   const tableStore = useTableStore();
   const statsStore = useStatsStore();
+
+  const syncState = computed<QueueSyncState>(() => ({
+    items: items.value,
+    currentCalled: currentCalled.value,
+    counters: counters.value,
+  }));
+
+  const syncStateRef = ref<QueueSyncState>(syncState.value);
+
+  watch(
+    syncState,
+    (newVal) => {
+      syncStateRef.value = newVal;
+    },
+    { deep: true }
+  );
+
+  const { loadInitialState, requestState, cleanup } = useCrossTabSync<QueueSyncState>(
+    'queue',
+    syncStateRef,
+    serializeQueueState,
+    deserializeQueueState,
+    (newState) => {
+      items.value = newState.items;
+      currentCalled.value = newState.currentCalled;
+      counters.value = newState.counters;
+    }
+  );
+
+  const initialized = loadInitialState();
+  if (!initialized) {
+    requestState();
+  }
 
   const waitingItems = computed(() =>
     items.value.filter((i) => i.status === 'waiting' || i.status === 'called')
@@ -181,5 +253,6 @@ export const useQueueStore = defineStore('queue', () => {
     updateWaitTimes,
     updateEstimatedTimes,
     getQueueStats,
+    _syncCleanup: cleanup,
   };
 });

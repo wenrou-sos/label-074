@@ -1,14 +1,64 @@
 import { defineStore } from 'pinia';
-import { ref, computed } from 'vue';
+import { ref, computed, watch } from 'vue';
 import type { Reservation } from '../types/reservation';
 import type { TableInfo, TableType } from '../types/table';
 import { initialReservations } from '../mock/reservation';
 import { getMinutesDiff } from '../composables/useTimer';
 import { useTableStore } from './table';
+import { useCrossTabSync } from '../composables/useCrossTabSync';
+
+interface ReservationSyncState {
+  reservations: Reservation[];
+}
+
+const serializeReservationState = (state: ReservationSyncState) => ({
+  reservations: state.reservations.map((r) => ({
+    ...r,
+    reservedTime: r.reservedTime.toISOString(),
+    createdAt: r.createdAt?.toISOString() || null,
+  })),
+});
+
+const deserializeReservationState = (data: any): ReservationSyncState => ({
+  reservations: data.reservations.map((r: any) => ({
+    ...r,
+    reservedTime: new Date(r.reservedTime),
+    createdAt: r.createdAt ? new Date(r.createdAt) : undefined,
+  })),
+});
 
 export const useReservationStore = defineStore('reservation', () => {
   const reservations = ref<Reservation[]>([...initialReservations]);
   const tableStore = useTableStore();
+
+  const syncState = computed<ReservationSyncState>(() => ({
+    reservations: reservations.value,
+  }));
+
+  const syncStateRef = ref<ReservationSyncState>(syncState.value);
+
+  watch(
+    syncState,
+    (newVal) => {
+      syncStateRef.value = newVal;
+    },
+    { deep: true }
+  );
+
+  const { loadInitialState, requestState, cleanup } = useCrossTabSync<ReservationSyncState>(
+    'reservation',
+    syncStateRef,
+    serializeReservationState,
+    deserializeReservationState,
+    (newState) => {
+      reservations.value = newState.reservations;
+    }
+  );
+
+  const initialized = loadInitialState();
+  if (!initialized) {
+    requestState();
+  }
 
   const todayReservations = computed(() =>
     [...reservations.value].sort((a, b) => a.reservedTime.getTime() - b.reservedTime.getTime())
@@ -163,5 +213,6 @@ export const useReservationStore = defineStore('reservation', () => {
     seatReservation,
     cancelReservation,
     getTimeGroupedReservations,
+    _syncCleanup: cleanup,
   };
 });
