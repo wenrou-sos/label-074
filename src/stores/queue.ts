@@ -3,6 +3,8 @@ import { ref, computed } from 'vue';
 import type { QueueItem, TableType, QueueStatus } from '../types/queue';
 import { queueColumnConfigs, initialQueueItems, customerNames, genRandomPhone } from '../mock/queue';
 import { getMinutesDiff } from '../composables/useTimer';
+import { useTableStore } from './table';
+import { useStatsStore } from './stats';
 
 export const useQueueStore = defineStore('queue', () => {
   const items = ref<QueueItem[]>([...initialQueueItems]);
@@ -15,6 +17,9 @@ export const useQueueStore = defineStore('queue', () => {
     large: 4,
     private: 2,
   });
+
+  const tableStore = useTableStore();
+  const statsStore = useStatsStore();
 
   const waitingItems = computed(() =>
     items.value.filter((i) => i.status === 'waiting' || i.status === 'called')
@@ -66,16 +71,40 @@ export const useQueueStore = defineStore('queue', () => {
     return next;
   };
 
-  const confirmSeated = (itemId: string) => {
+  const confirmSeated = (itemId: string, tableId?: string) => {
     const item = items.value.find((i) => i.id === itemId);
-    if (item) {
-      item.status = 'seated';
+    if (!item) return null;
+
+    const idleTables = tableStore.getIdleTablesByType(item.tableType);
+    if (idleTables.length === 0) {
+      console.warn(`没有空闲的${item.tableType}桌可用`);
+      return null;
     }
+
+    const targetTable = tableId 
+      ? idleTables.find((t) => t.id === tableId) 
+      : idleTables[0];
+
+    if (!targetTable) {
+      console.warn('指定的桌台不可用或不存在');
+      return null;
+    }
+
+    item.status = 'seated';
+    tableStore.seatParty(
+      targetTable.id,
+      item.customerName,
+      item.partySize,
+      item.id
+    );
+    statsStore.stats.totalDiningParties++;
+
     if (currentCalled.value?.id === itemId) {
       currentCalled.value = null;
       showCallScreen.value = false;
     }
     updateEstimatedTimes();
+    return targetTable;
   };
 
   const markMissed = (itemId: string) => {

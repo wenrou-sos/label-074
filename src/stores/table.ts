@@ -3,10 +3,12 @@ import { ref, computed } from 'vue';
 import type { TableInfo, TableType, TableStatus } from '../types/table';
 import { initialTables, tableStatusConfigs } from '../mock/tables';
 import { getMinutesDiff } from '../composables/useTimer';
+import { useStatsStore } from './stats';
 
 export const useTableStore = defineStore('table', () => {
   const tables = ref<TableInfo[]>(JSON.parse(JSON.stringify(initialTables)));
   const statusConfigs = tableStatusConfigs;
+  const statsStore = useStatsStore();
 
   const totalTables = computed(() => tables.value.length);
 
@@ -28,9 +30,10 @@ export const useTableStore = defineStore('table', () => {
 
   const setTableStatus = (id: string, status: TableStatus) => {
     const table = getTableById(id);
-    if (!table) return;
+    if (!table) return 0;
 
     const prevStatus = table.status;
+    const prevDuration = table.diningDuration || 0;
     table.status = status;
 
     if (status === 'dining') {
@@ -42,8 +45,9 @@ export const useTableStore = defineStore('table', () => {
       table.currentParty = undefined;
     }
 
-    if (prevStatus === 'dining' && status !== 'dining') {
-      return table.diningDuration || 0;
+    if (prevStatus === 'dining' && status !== 'dining' && prevDuration > 0) {
+      statsStore.addCompletedDining(prevDuration);
+      return prevDuration;
     }
     return 0;
   };
