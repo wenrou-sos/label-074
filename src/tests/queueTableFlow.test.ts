@@ -81,6 +81,7 @@ function runTests() {
     
     const beforeIdleCount = tableStore.getIdleTablesByType('small').length;
     const beforeDiningCount = tableStore.diningTables.length;
+    const beforeDiningParties = statsStore.stats.totalDiningParties;
 
     assignedTable = queueStore.confirmSeated(waitingCustomer!.id);
     
@@ -90,26 +91,27 @@ function runTests() {
 
     const afterIdleCount = tableStore.getIdleTablesByType('small').length;
     const afterDiningCount = tableStore.diningTables.length;
+    const afterDiningParties = statsStore.stats.totalDiningParties;
 
     assertEqual(afterIdleCount, beforeIdleCount - 1, '空闲桌台应该减少1');
     assertEqual(afterDiningCount, beforeDiningCount + 1, '就餐桌台应该增加1');
+    assertEqual(afterDiningParties, beforeDiningParties, '入座时用餐桌次不应该增加（避免重复统计）');
 
     const updatedQueueItem = queueStore.items.find(i => i.id === waitingCustomer!.id);
     assertEqual(updatedQueueItem!.status, 'seated', '排队状态应该变为已入座');
 
     console.log(`   分配桌台: ${assignedTable!.name}`);
     console.log(`   桌台当前顾客: ${assignedTable!.currentParty?.customerName}`);
+    console.log(`   用餐桌次: ${afterDiningParties} (未增加，正确)`);
   });
 
-  test('5. 统计更新 - 用餐桌次和翻台率更新', () => {
-    const afterDiningParties = statsStore.stats.totalDiningParties;
-    assertEqual(afterDiningParties, initialDiningParties + 1, '用餐桌次应该增加1');
-    
+  test('5. 验证 - 入座时翻台率不变', () => {
     const afterTurnoverRate = statsStore.turnoverRate;
-    assert(afterTurnoverRate > statsStore.turnoverRate - 0.01, '翻台率应该更新');
+    const expectedRate = initialDiningParties / (tableStore.totalTables || statsStore.stats.totalTables);
     
-    console.log(`   更新后用餐桌次: ${afterDiningParties}`);
-    console.log(`   更新后翻台率: ${afterTurnoverRate.toFixed(2)}轮`);
+    assert(Math.abs(afterTurnoverRate - expectedRate) < 0.01, '入座时翻台率不应该变化');
+    
+    console.log(`   当前翻台率: ${afterTurnoverRate.toFixed(2)}轮 (未变化，正确)`);
   });
 
   test('6. 模拟用餐时长更新', () => {
@@ -122,12 +124,13 @@ function runTests() {
 
   const initialCompletedDurations = [...statsStore.stats.completedDiningDurations];
 
-  test('7. 核心流程 - 结束用餐进入待清理状态', () => {
+  test('7. 核心流程 - 结束用餐进入待清理状态（此时才统计桌次）', () => {
     assertNotEmpty(assignedTable, '应该有已分配的桌台');
     
     const beforeCompletedCount = statsStore.stats.completedDiningDurations.length;
     const beforeDiningCount = tableStore.diningTables.length;
     const beforeCleaningCount = tableStore.cleaningTables.length;
+    const beforeDiningParties = statsStore.stats.totalDiningParties;
 
     const duration = tableStore.markCleaning(assignedTable!.id);
     
@@ -139,25 +142,34 @@ function runTests() {
     const afterCompletedCount = statsStore.stats.completedDiningDurations.length;
     const afterDiningCount = tableStore.diningTables.length;
     const afterCleaningCount = tableStore.cleaningTables.length;
+    const afterDiningParties = statsStore.stats.totalDiningParties;
 
     assertEqual(afterCompletedCount, beforeCompletedCount + 1, '已完成用餐时长记录应该增加1');
     assertEqual(afterDiningCount, beforeDiningCount - 1, '就餐桌台应该减少1');
     assertEqual(afterCleaningCount, beforeCleaningCount + 1, '待清理桌台应该增加1');
+    assertEqual(afterDiningParties, beforeDiningParties + 1, '结束用餐时用餐桌次才增加1（正确统计）');
 
     const lastDuration = statsStore.stats.completedDiningDurations[statsStore.stats.completedDiningDurations.length - 1];
     assertEqual(lastDuration, 65, '最后一条时长记录应该是65分钟');
 
     console.log(`   记录用餐时长: 65分钟`);
     console.log(`   已完成时长样本数: ${afterCompletedCount}`);
+    console.log(`   用餐桌次: ${afterDiningParties} (增加1，正确)`);
   });
 
-  test('8. 统计更新 - 平均用餐时长更新', () => {
+  test('8. 统计更新 - 平均用餐时长和翻台率更新', () => {
     const newAvg = statsStore.avgDiningDuration;
     const oldSum = initialCompletedDurations.reduce((a, b) => a + b, 0);
     const expectedAvg = Math.round((oldSum + 65) / (initialCompletedDurations.length + 1));
     
     assertEqual(newAvg, expectedAvg, `平均用餐时长应该更新为${expectedAvg}分钟`);
+    
+    const newTurnoverRate = statsStore.turnoverRate;
+    const expectedTurnover = (initialDiningParties + 1) / (tableStore.totalTables || statsStore.stats.totalTables);
+    assert(Math.abs(newTurnoverRate - expectedTurnover) < 0.01, '翻台率应该在结束用餐时才更新');
+    
     console.log(`   更新后平均用餐时长: ${newAvg}分钟`);
+    console.log(`   更新后翻台率: ${newTurnoverRate.toFixed(2)}轮`);
   });
 
   test('9. 核心流程 - 清理完成变为空闲桌台', () => {

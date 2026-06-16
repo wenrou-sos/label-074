@@ -97,7 +97,6 @@ export const useQueueStore = defineStore('queue', () => {
       item.partySize,
       item.id
     );
-    statsStore.stats.totalDiningParties++;
 
     if (currentCalled.value?.id === itemId) {
       currentCalled.value = null;
