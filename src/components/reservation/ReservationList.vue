@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue';
-import { CalendarDays, Clock, AlertCircle } from 'lucide-vue-next';
+import { CalendarDays, Clock, AlertCircle, Users } from 'lucide-vue-next';
 import { useReservationStore } from '../../stores/reservation';
 import ReservationCard from './ReservationCard.vue';
 
@@ -15,6 +15,7 @@ const todayStr = computed(() => {
 });
 
 const pendingCount = computed(() => reservationStore.pendingReservations.length);
+const arrivedNotSeatedCount = computed(() => reservationStore.arrivedNotSeatedReservations.length);
 const expiredCount = computed(() =>
   reservationStore.reservations.filter((r) => r.status === 'expired').length
 );
@@ -48,7 +49,11 @@ const handleCancel = (id: string) => {
             </div>
           </div>
         </div>
-        <div class="flex items-center gap-2">
+        <div class="flex items-center gap-2 flex-wrap justify-end">
+          <span v-if="arrivedNotSeatedCount > 0" class="text-xs px-2.5 py-1 rounded-full bg-amber-100 text-amber-700 font-medium flex items-center gap-1">
+            <Users class="w-3 h-3" />
+            待入座 {{ arrivedNotSeatedCount }}
+          </span>
           <span class="text-xs px-2.5 py-1 rounded-full bg-blue-100 text-blue-700 font-medium">
             待到店 {{ pendingCount }}
           </span>

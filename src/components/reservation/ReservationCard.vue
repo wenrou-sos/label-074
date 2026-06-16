@@ -216,6 +216,16 @@ const statusConfig = computed(() => {
           取消
         </button>
       </div>
+
+      <div v-if="isArrivedNotSeated" class="flex items-center gap-2 pt-2 border-t border-amber-100">
+        <button
+          class="flex-1 px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-600 text-white text-xs font-medium flex items-center justify-center gap-1 transition-colors"
+          @click="showTableSelect = true"
+        >
+          <UtensilsCrossed class="w-3.5 h-3.5" />
+          分配桌位
+        </button>
+      </div>
     </div>
   </div>
 
@@ -227,13 +237,23 @@ const statusConfig = computed(() => {
       >
         <div class="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" @click="showTableSelect = false" />
         <div class="relative bg-white rounded-2xl shadow-2xl max-w-md w-full overflow-hidden">
-          <div class="px-5 py-4 bg-gradient-to-r from-emerald-50 to-teal-50 border-b border-slate-200">
+          <div
+            class="px-5 py-4 border-b border-slate-200"
+            :class="isArrivedNotSeated ? 'bg-gradient-to-r from-amber-50 to-orange-50' : 'bg-gradient-to-r from-emerald-50 to-teal-50'"
+          >
             <div class="flex items-center gap-3">
-              <div class="w-10 h-10 rounded-xl bg-white flex items-center justify-center shadow-sm">
-                <UtensilsCrossed class="w-5 h-5 text-emerald-600" />
+              <div
+                class="w-10 h-10 rounded-xl bg-white flex items-center justify-center shadow-sm"
+              >
+                <UtensilsCrossed
+                  class="w-5 h-5"
+                  :class="isArrivedNotSeated ? 'text-amber-600' : 'text-emerald-600'"
+                />
               </div>
               <div>
-                <h3 class="font-bold text-slate-800">选择桌台入座</h3>
+                <h3 class="font-bold text-slate-800">
+                  {{ isArrivedNotSeated ? '分配桌位入座' : '选择桌台入座' }}
+                </h3>
                 <p class="text-xs text-slate-500">
                   {{ reservation.customerName }} · {{ reservation.partySize }}人 · {{ typeLabels[reservation.tableType] }}
                 </p>
@@ -247,7 +267,9 @@ const statusConfig = computed(() => {
                 <AlertTriangle class="w-7 h-7 text-amber-500" />
               </div>
               <p class="text-sm text-slate-600 mb-1">暂无空闲桌台</p>
-              <p class="text-xs text-slate-400">可先标记到店，稍后安排桌位</p>
+              <p class="text-xs text-slate-400">
+                {{ isArrivedNotSeated ? '请稍候，桌台清理后将自动释放' : '可先标记到店，稍后安排桌位' }}
+              </p>
             </div>
 
             <div v-else class="p-3 space-y-2">
@@ -301,26 +323,42 @@ const statusConfig = computed(() => {
 
           <div class="px-5 py-3 border-t border-slate-100 bg-slate-50 flex gap-2">
             <button
+              v-if="reservation.status === 'pending' && recommendedTables.length === 0"
               class="flex-1 px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-600 text-sm font-medium transition-colors"
               @click="showTableSelect = false"
             >
               取消
             </button>
             <button
-              v-if="recommendedTables.length > 0"
-              class="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-600 text-sm font-medium transition-colors"
+              v-if="reservation.status === 'pending' && recommendedTables.length === 0"
+              class="flex-1 px-4 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white text-sm font-medium transition-colors flex items-center justify-center gap-1.5"
               @click="handleMarkArrivedOnly"
             >
-              仅标记到店
-            </button>
-            <button
-              v-if="recommendedTables.length > 0"
-              class="flex-1 px-4 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white text-sm font-medium transition-colors flex items-center justify-center gap-1.5"
-              @click="handleSelectTable(recommendedTables[0].id)"
-            >
               <Check class="w-4 h-4" />
-              快速入座
+              先标记到店
             </button>
+            <template v-else>
+              <button
+                class="flex-1 px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-600 text-sm font-medium transition-colors"
+                @click="showTableSelect = false"
+              >
+                取消
+              </button>
+              <button
+                v-if="reservation.status === 'pending'"
+                class="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-600 text-sm font-medium transition-colors"
+                @click="handleMarkArrivedOnly"
+              >
+                仅标记到店
+              </button>
+              <button
+                class="flex-1 px-4 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white text-sm font-medium transition-colors flex items-center justify-center gap-1.5"
+                @click="handleSelectTable(recommendedTables[0].id)"
+              >
+                <Check class="w-4 h-4" />
+                快速入座
+              </button>
+            </template>
           </div>
         </div>
       </div>

@@ -1,5 +1,6 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import HomePage from '@/pages/HomePage.vue'
+import DisplayBoard from '@/pages/DisplayBoard.vue'
 import TestRunner from '@/components/TestRunner.vue'
 
 // 定义路由配置
@@ -8,6 +9,11 @@ const routes = [
     path: '/',
     name: 'home',
     component: HomePage,
+  },
+  {
+    path: '/display',
+    name: 'display',
+    component: DisplayBoard,
   },
   {
     path: '/test',

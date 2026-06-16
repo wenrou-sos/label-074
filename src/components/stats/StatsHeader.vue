@@ -1,12 +1,14 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted } from 'vue';
-import { TrendingUp, Clock, UserMinus, UtensilsCrossed, Store, RefreshCw } from 'lucide-vue-next';
+import { useRouter } from 'vue-router';
+import { TrendingUp, Clock, UserMinus, UtensilsCrossed, Store, RefreshCw, MonitorPlay } from 'lucide-vue-next';
 import { useStatsStore } from '../../stores/stats';
 import { useQueueStore } from '../../stores/queue';
 import { formatDuration, formatTime } from '../../composables/useTimer';
 
 const statsStore = useStatsStore();
 const queueStore = useQueueStore();
+const router = useRouter();
 
 let clockTimer: number | null = null;
 
@@ -77,11 +79,20 @@ const statCards = computed(() => [
           <div class="text-sm text-slate-400">{{ dateStr }}</div>
         </div>
       </div>
-      <div class="text-right">
-        <div class="text-3xl font-bold tabular-nums tracking-wider text-white">
-          {{ currentTimeStr }}
+      <div class="flex items-center gap-4">
+        <button
+          class="px-4 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-white text-sm font-medium flex items-center gap-2 transition-colors"
+          @click="router.push('/display')"
+        >
+          <MonitorPlay class="w-4 h-4" />
+          叫号大屏
+        </button>
+        <div class="text-right">
+          <div class="text-3xl font-bold tabular-nums tracking-wider text-white">
+            {{ currentTimeStr }}
+          </div>
+          <div class="text-xs text-slate-400 mt-0.5">实时运营数据</div>
         </div>
-        <div class="text-xs text-slate-400 mt-0.5">实时运营数据</div>
       </div>
     </div>
 
