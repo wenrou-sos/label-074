@@ -1,8 +1,10 @@
 <script setup lang="ts">
-import { computed } from 'vue';
-import { Clock, Users, Phone, MapPin, AlertTriangle, Check, X, MessageSquare } from 'lucide-vue-next';
+import { computed, ref } from 'vue';
+import { Clock, Users, Phone, MapPin, AlertTriangle, Check, X, MessageSquare, Sparkles, UtensilsCrossed, ChevronRight } from 'lucide-vue-next';
 import type { Reservation } from '../../types/reservation';
+import type { TableInfo } from '../../types/table';
 import { formatTime, getMinutesDiff } from '../../composables/useTimer';
+import { useReservationStore } from '../../stores/reservation';
 
 const props = defineProps<{
   reservation: Reservation;
@@ -11,13 +13,57 @@ const props = defineProps<{
 const emit = defineEmits<{
   (e: 'arrive'): void;
   (e: 'cancel'): void;
+  (e: 'seated', tableId: string): void;
 }>();
+
+const reservationStore = useReservationStore();
+const showTableSelect = ref(false);
 
 const typeLabels: Record<string, string> = {
   small: '小桌',
   medium: '中桌',
   large: '大桌',
   private: '包厢',
+};
+
+const recommendedTables = computed(() => 
+  reservationStore.getRecommendedTables(props.reservation.id)
+);
+
+const hasRecommendedTables = computed(() => recommendedTables.value.length > 0);
+
+const getTableMatchLevel = (table: TableInfo): 'perfect' | 'good' | 'alternative' => {
+  if (table.tableType === props.reservation.tableType && table.capacity === props.reservation.partySize) {
+    return 'perfect';
+  }
+  if (table.tableType === props.reservation.tableType) {
+    return 'good';
+  }
+  return 'alternative';
+};
+
+const matchLevelLabels: Record<string, { label: string; class: string; bgClass: string }> = {
+  perfect: { label: '完美匹配', class: 'text-emerald-700', bgClass: 'bg-emerald-100' },
+  good: { label: '推荐', class: 'text-blue-700', bgClass: 'bg-blue-100' },
+  alternative: { label: '备选', class: 'text-amber-700', bgClass: 'bg-amber-100' },
+};
+
+const handleArriveClick = () => {
+  if (hasRecommendedTables.value) {
+    showTableSelect.value = true;
+  } else {
+    emit('arrive');
+  }
+};
+
+const handleSelectTable = (tableId: string) => {
+  emit('seated', tableId);
+  showTableSelect.value = false;
+};
+
+const handleMarkArrivedOnly = () => {
+  emit('arrive');
+  showTableSelect.value = false;
 };
 
 const isExpiring = computed(() => {
@@ -133,7 +179,7 @@ const statusConfig = computed(() => {
       <div v-if="reservation.status === 'pending'" class="flex items-center gap-2 pt-2 border-t border-slate-100">
         <button
           class="flex-1 px-3 py-1.5 rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-medium flex items-center justify-center gap-1 transition-colors"
-          @click="emit('arrive')"
+          @click="handleArriveClick"
         >
           <Check class="w-3.5 h-3.5" />
           确认到店
@@ -148,4 +194,110 @@ const statusConfig = computed(() => {
       </div>
     </div>
   </div>
+
+  <Teleport to="body">
+    <Transition name="modal">
+      <div
+        v-if="showTableSelect"
+        class="fixed inset-0 z-50 flex items-center justify-center p-4"
+      >
+        <div class="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" @click="showTableSelect = false" />
+        <div class="relative bg-white rounded-2xl shadow-2xl max-w-md w-full overflow-hidden">
+          <div class="px-5 py-4 bg-gradient-to-r from-emerald-50 to-teal-50 border-b border-slate-200">
+            <div class="flex items-center gap-3">
+              <div class="w-10 h-10 rounded-xl bg-white flex items-center justify-center shadow-sm">
+                <UtensilsCrossed class="w-5 h-5 text-emerald-600" />
+              </div>
+              <div>
+                <h3 class="font-bold text-slate-800">选择桌台入座</h3>
+                <p class="text-xs text-slate-500">
+                  {{ reservation.customerName }} · {{ reservation.partySize }}人 · {{ typeLabels[reservation.tableType] }}
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div class="max-h-96 overflow-y-auto">
+            <div v-if="recommendedTables.length === 0" class="p-8 text-center">
+              <div class="w-14 h-14 rounded-full bg-amber-100 flex items-center justify-center mx-auto mb-3">
+                <AlertTriangle class="w-7 h-7 text-amber-500" />
+              </div>
+              <p class="text-sm text-slate-600 mb-1">暂无空闲桌台</p>
+              <p class="text-xs text-slate-400">可先标记到店，稍后安排桌位</p>
+            </div>
+
+            <div v-else class="p-3 space-y-2">
+              <div
+                v-for="table in recommendedTables"
+                :key="table.id"
+                class="flex items-center gap-3 p-3 rounded-xl border border-slate-200 hover:border-emerald-300 hover:bg-emerald-50/50 cursor-pointer transition-all group"
+                @click="handleSelectTable(table.id)"
+              >
+                <div class="w-12 h-12 rounded-xl bg-emerald-100 flex items-center justify-center shrink-0">
+                  <span class="font-bold text-emerald-700">{{ table.name }}</span>
+                </div>
+                <div class="flex-1 min-w-0">
+                  <div class="flex items-center gap-2 mb-0.5">
+                    <span class="font-semibold text-slate-800">{{ table.name }}</span>
+                    <span
+                      class="text-[10px] px-1.5 py-0.5 rounded-md font-medium"
+                      :class="[matchLevelLabels[getTableMatchLevel(table)].bgClass, matchLevelLabels[getTableMatchLevel(table)].class]"
+                    >
+                      <Sparkles v-if="getTableMatchLevel(table) === 'perfect'" class="w-3 h-3 inline -mt-0.5" />
+                      {{ matchLevelLabels[getTableMatchLevel(table)].label }}
+                    </span>
+                  </div>
+                  <div class="text-xs text-slate-500 flex items-center gap-2">
+                    <span>{{ typeLabels[table.tableType] }}</span>
+                    <span>·</span>
+                    <span>可坐{{ table.capacity }}人</span>
+                  </div>
+                </div>
+                <ChevronRight class="w-5 h-5 text-slate-300 group-hover:text-emerald-500 transition-colors shrink-0" />
+              </div>
+            </div>
+          </div>
+
+          <div class="px-5 py-3 border-t border-slate-100 bg-slate-50 flex gap-2">
+            <button
+              class="flex-1 px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-600 text-sm font-medium transition-colors"
+              @click="showTableSelect = false"
+            >
+              取消
+            </button>
+            <button
+              v-if="recommendedTables.length > 0"
+              class="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-600 text-sm font-medium transition-colors"
+              @click="handleMarkArrivedOnly"
+            >
+              仅标记到店
+            </button>
+            <button
+              v-if="recommendedTables.length > 0"
+              class="flex-1 px-4 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white text-sm font-medium transition-colors flex items-center justify-center gap-1.5"
+              @click="handleSelectTable(recommendedTables[0].id)"
+            >
+              <Check class="w-4 h-4" />
+              快速入座
+            </button>
+          </div>
+        </div>
+      </div>
+    </Transition>
+  </Teleport>
 </template>
+
+<style scoped>
+.modal-enter-active,
+.modal-leave-active {
+  transition: all 0.2s ease;
+}
+.modal-enter-from,
+.modal-leave-to {
+  opacity: 0;
+}
+.modal-enter-from > div:last-child,
+.modal-leave-to > div:last-child {
+  transform: scale(0.95);
+}
+</style>

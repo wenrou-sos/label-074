@@ -23,6 +23,10 @@ const handleArrive = (id: string) => {
   reservationStore.markArrived(id);
 };
 
+const handleSeated = (id: string, tableId: string) => {
+  reservationStore.seatReservation(id, tableId);
+};
+
 const handleCancel = (id: string) => {
   reservationStore.cancelReservation(id);
 };
@@ -74,6 +78,7 @@ const handleCancel = (id: string) => {
           :key="r.id"
           :reservation="r"
           @arrive="handleArrive(r.id)"
+          @seated="(tableId) => handleSeated(r.id, tableId)"
           @cancel="handleCancel(r.id)"
         />
       </div>
