@@ -3,7 +3,9 @@ import { onMounted, onUnmounted } from 'vue';
 import { useQueueStore } from '../stores/queue';
 import { useTableStore } from '../stores/table';
 import { useReservationStore } from '../stores/reservation';
+import { useTrendStore } from '../stores/trend';
 import StatsHeader from '../components/stats/StatsHeader.vue';
+import TrendCharts from '../components/stats/TrendCharts.vue';
 import QueueColumn from '../components/queue/QueueColumn.vue';
 import CallScreen from '../components/queue/CallScreen.vue';
 import ReservationList from '../components/reservation/ReservationList.vue';
@@ -12,14 +14,18 @@ import FloorPlan from '../components/floor/FloorPlan.vue';
 const queueStore = useQueueStore();
 const tableStore = useTableStore();
 const reservationStore = useReservationStore();
+const trendStore = useTrendStore();
 
 let tickTimer: number | null = null;
 let reservationTimer: number | null = null;
 
 onMounted(() => {
+  trendStore.takeSnapshot();
+
   tickTimer = window.setInterval(() => {
     tableStore.updateDiningDurations();
     queueStore.updateWaitTimes();
+    trendStore.takeSnapshot();
   }, 60000);
 
   reservationTimer = window.setInterval(() => {
@@ -38,6 +44,7 @@ onUnmounted(() => {
 <template>
   <div class="min-h-screen flex flex-col p-4 gap-4">
     <StatsHeader />
+    <TrendCharts />
 
     <div class="flex-1 grid grid-cols-12 gap-4 min-h-0">
       <div class="col-span-5 flex flex-col gap-4 min-h-0">
